@@ -16,6 +16,7 @@ struct BDB {
 struct BDBC {
   DBC* cursor;
   void* get;
+  void* close;
 };
 
 int bdb_create(struct BDB* bdb,DB_ENV* dbenv, u_int32_t flags){
@@ -41,6 +42,7 @@ int bdb_cursor(DB* db,struct BDBC* dbc, uint32_t flags){
     r = db->cursor(db, NULL, &dbc->cursor, flags);
     if( r == 0){
         dbc->get = dbc->cursor->get;
+		dbc->close = dbc->cursor->close;
     }
     return r;
 }

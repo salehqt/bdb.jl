@@ -1,4 +1,10 @@
 import Base.ensureroom
+import Base.ref
+import Base.assign
+import Base.done
+import Base.start
+import Base.next
+
 typealias PV Ptr{Void}
 
 const shlib = "./libjuliabdb"
@@ -25,7 +31,7 @@ type BDB
    end
 end
 
-const DB_DBT_USERMEM = int32(0x100) #/* Return in user's memory. */
+const DB_DBT_USERMEM = int32(0x800) #/* Return in user's memory. */
 const DB_BUFFER_SMALL =	int32(-30999)#/* User memory too small for return. */
 
 const DB_NOTFOUND = (-30988) #/* Key/data pair not found (EOF). */
@@ -45,6 +51,7 @@ end
 type DBC
   cursor::PV
   get::PV
+  close::PV
 
   function DBC(db::BDB)
       a = new()
@@ -97,9 +104,9 @@ const DB_UNKNOWN = int32(5)
 const DB_RECNO = int32(3)
 const DB_QUEUE = int32(4)
 
-const DB_CREATE  = int32(1)
+const DB_CREATE  = uint32(1)
 
-function open(d::BDB, filename::String, dbtype::Int32, flags::Uint32)
+function open(d::BDB, filename::ASCIIString, dbtype::Int32, flags::Uint32)
     r = ccall(d.open, Int32, (PV,PV,Ptr{Uint8},Ptr{Uint8},Int32,Int32,Int)
           ,d.db,C_NULL,bytestring(filename),C_NULL,dbtype,flags,0)
     check_err(r,"Error opening file")
@@ -173,6 +180,10 @@ function internal_get(c::DBC,kdbt::DBT,ddbt::DBT,flags::Uint32)
     ccall(c.get, Int32, (PV,Ptr{DBT},Ptr{DBT},Uint32),c.cursor, &kdbt, &ddbt, flags)
 end
 
+function close(c::DBC)
+    ccall(c.close, Int32, (PV,), c.cursor)
+end
+
 function get(c::DBC,key::IOBuffer,data::IOBuffer,flags::Uint32)
     k = DBT(key)
     d = DBT(data)
@@ -199,6 +210,7 @@ function assign(d::BDB,data,key)
     ()
 end
 
+
 function each(f,K::Type,D::Type, c::DBC)
 	while true
         retval = get(c,IOBuffer(),IOBuffer(),DB_NEXT)
@@ -212,3 +224,28 @@ function each(f,K::Type,D::Type, c::DBC)
         end
 	end
 end
+
+type TypedCursor{K,D}
+    cursor::DBC
+end
+
+function typed_cursor{K,D}(db::BDB, ::Type{K}, ::Type{D})
+    return TypedCursor{K,D}(cursor(db))
+end
+
+function get_next_in_cursor{K,D}(c::DBC,::Type{K}, ::Type{D})
+    retval = get(c,IOBuffer(),IOBuffer(),DB_NEXT)
+    if isa(retval,())
+        close(c)
+        return  ()
+    else
+        (k,d)  = retval
+        key = unboxBuffer(k,K)
+        data = unboxBuffer(d,D)
+        return (key,data)
+    end
+end
+
+start{K,D}(tc::TypedCursor{K,D}) = get_next_in_cursor(tc.cursor,K,D)
+next{K,D}(tc::TypedCursor{K,D},n) = (n, get_next_in_cursor(tc.cursor,K,D))
+done{K,D}(tc::TypedCursor{K,D},n) = isa(n,())

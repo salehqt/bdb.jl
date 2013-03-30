@@ -1,5 +1,7 @@
 
-require("db")
+require("bdb.jl")
+
+
 db = BDB()
 
 
@@ -17,6 +19,6 @@ assign(db, "OEOEO", 45)
 
 #kk = boxBuffer("22O2O2")
 #println(get(db,kk,IOBuffer(),EMPTY_FLAGS))
-println(ref(db,String,"22O2O2"))
+#println(ref(db,String,"22O2O2"))
 
 close(db)
